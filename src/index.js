@@ -26,6 +26,25 @@ const DATABASE_URL = process.env.POSTGRESQL_ADDON_URI;
 // -------------------------------------------------------------------
 
 let storage;
+const sseClients = new Set();
+
+function writeSseEvent(res, event, data) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function broadcastTodoAlert(todo) {
+  const payload = {
+    id: todo.id,
+    title: todo.title,
+    status: todo.status,
+    due_date: todo.due_date ?? null,
+  };
+
+  for (const client of sseClients) {
+    writeSseEvent(client, "todo_alert", payload);
+  }
+}
 
 if (DATABASE_URL) {
   const { Pool } = require("pg");
@@ -202,6 +221,29 @@ app.get("/health", async (req, res) => {
   res.json(health);
 });
 
+// GET /alerts (SSE)
+app.get("/alerts", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  sseClients.add(res);
+
+  const sendPing = () => {
+    writeSseEvent(res, "ping", { timestamp: new Date().toISOString() });
+  };
+
+  sendPing();
+  const pingInterval = setInterval(sendPing, 30_000);
+
+  req.on("close", () => {
+    clearInterval(pingInterval);
+    sseClients.delete(res);
+    res.end();
+  });
+});
+
 // GET /todos?status=pending|done
 app.get(["/todo", "/todos"], async (req, res) => {
   const { status } = req.query;
@@ -246,6 +288,7 @@ app.post("/todos", async (req, res) => {
       description,
       dueDate,
     });
+    broadcastTodoAlert(todo);
     return res.status(201).json(todo);
   } catch (err) {
     console.error("Erreur lors de la création de la tâche :", err.message);
@@ -284,6 +327,7 @@ app.patch("/todos/:id", async (req, res) => {
     if (!todo) {
       return res.status(404).json({ error: "Todo not found" });
     }
+    broadcastTodoAlert(todo);
     return res.status(200).json(todo);
   } catch (err) {
     console.error("Erreur lors de la mise à jour de la tâche :", err.message);
