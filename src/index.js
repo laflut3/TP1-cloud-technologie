@@ -94,6 +94,10 @@ if (DATABASE_URL) {
 
       return result.rows[0] ?? null;
     },
+    async deleteById(id) {
+      const result = await pool.query("DELETE FROM items WHERE id = $1 RETURNING id", [id]);
+      return result.rowCount > 0;
+    },
   };
 } else {
   console.warn("POSTGRESQL_ADDON_URI non défini — stockage en mémoire (données perdues au redémarrage)");
@@ -144,6 +148,15 @@ if (DATABASE_URL) {
       }
 
       return item;
+    },
+    async deleteById(id) {
+      const index = items.findIndex((todo) => todo.id === id);
+      if (index === -1) {
+        return false;
+      }
+
+      items.splice(index, 1);
+      return true;
     },
   };
 }
@@ -245,6 +258,25 @@ app.patch("/todos/:id", async (req, res) => {
     return res.status(200).json(todo);
   } catch (err) {
     console.error("Erreur lors de la mise à jour de la tâche :", err.message);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// DELETE /todos/:id
+app.delete("/todos/:id", async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "Invalid id" });
+  }
+
+  try {
+    const deleted = await storage.deleteById(id);
+    if (!deleted) {
+      return res.status(404).json({ error: "Todo not found" });
+    }
+    return res.status(204).send();
+  } catch (err) {
+    console.error("Erreur lors de la suppression de la tâche :", err.message);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
