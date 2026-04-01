@@ -54,6 +54,8 @@ Note:
 | `POSTGRESQL_ADDON_URI` | Clever Cloud (add-on) | URI de connexion PostgreSQL. |
 | `APP_NAME` | Vous | Nom affiche dans `/health`. |
 | `APP_VERSION` | Vous | Version affichee dans `GET /`. |
+| `PG_POOL_MAX` | Vous (optionnel) | Nombre max de connexions PostgreSQL par instance (`1` par defaut). |
+| `ALERTS_POLL_INTERVAL_MS` | Vous (optionnel) | Intervalle de polling des alertes distribuees (`1000` ms par defaut). |
 
 Si `POSTGRESQL_ADDON_URI` n'est pas definie, `/health` renvoie `database: "not configured"`.
 

@@ -17,10 +17,19 @@ app.use((req, res, next) => {
   next();
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 const APP_NAME = process.env.APP_NAME || "todo-torres";
 const APP_VERSION = process.env.APP_VERSION || "1.0.0";
 const DATABASE_URL = process.env.POSTGRESQL_ADDON_URI;
+const PG_POOL_MAX = Number.parseInt(process.env.PG_POOL_MAX || "1", 10);
+const ALERTS_POLL_INTERVAL_MS = Number.parseInt(
+  process.env.ALERTS_POLL_INTERVAL_MS || "1000",
+  10,
+);
+const INSTANCE_TAG =
+  process.env.CC_INSTANCE_ID ||
+  process.env.INSTANCE_ID ||
+  `local-${Math.random().toString(36).slice(2, 8)}`;
 
 // -------------------------------------------------------------------
 // Storage — PostgreSQL si POSTGRESQL_ADDON_URI est défini, mémoire sinon
@@ -28,7 +37,6 @@ const DATABASE_URL = process.env.POSTGRESQL_ADDON_URI;
 
 let storage;
 const sseClients = new Set();
-const ALERT_CHANNEL = "todo_alerts";
 
 function toTodoAlertPayload(todo) {
   return {
@@ -60,34 +68,73 @@ let publishTodoAlert = async (todo) => {
 };
 
 if (DATABASE_URL) {
-  const { Client, Pool } = require("pg");
-  const pool = new Pool({ connectionString: DATABASE_URL });
-  const alertListener = new Client({ connectionString: DATABASE_URL });
+  const { Pool } = require("pg");
+  const pool = new Pool({
+    connectionString: DATABASE_URL,
+    max: Number.isInteger(PG_POOL_MAX) && PG_POOL_MAX >= 1 ? PG_POOL_MAX : 1,
+  });
+
+  let alertsPollTimer = null;
+  let lastAlertEventId = 0;
+
+  async function pollDistributedAlerts() {
+    try {
+      const result = await pool.query(
+        "SELECT id, payload FROM alert_events WHERE id > $1 ORDER BY id ASC LIMIT 100",
+        [lastAlertEventId],
+      );
+
+      for (const row of result.rows) {
+        lastAlertEventId = row.id;
+
+        const event = row.payload;
+        if (!event || typeof event !== "object") {
+          continue;
+        }
+
+        if (event.source === INSTANCE_TAG) {
+          continue;
+        }
+
+        if (event.type === "todo_alert" && event.data) {
+          broadcastTodoAlertToLocalClients(event.data);
+        }
+      }
+    } catch (err) {
+      console.warn("Polling des alertes distribuees indisponible :", err.message);
+    }
+  }
 
   initAlertStreaming = async () => {
     try {
-      await alertListener.connect();
-      await alertListener.query(`LISTEN ${ALERT_CHANNEL}`);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS alert_events (
+          id              BIGSERIAL PRIMARY KEY,
+          source_instance TEXT NOT NULL,
+          event_type      TEXT NOT NULL,
+          payload         JSONB NOT NULL,
+          created_at      TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
 
-      alertListener.on("notification", (message) => {
-        if (message.channel !== ALERT_CHANNEL || !message.payload) {
-          return;
-        }
+      const latestEvent = await pool.query(
+        "SELECT COALESCE(MAX(id), 0) AS max_id FROM alert_events",
+      );
+      lastAlertEventId =
+        Number.parseInt(String(latestEvent.rows[0]?.max_id ?? "0"), 10) || 0;
 
-        try {
-          const payload = JSON.parse(message.payload);
-          broadcastTodoAlertToLocalClients(payload);
-        } catch (err) {
-          console.error("Payload d'alerte SSE invalide :", err.message);
-        }
-      });
+      alertsPollTimer = setInterval(() => {
+        pollDistributedAlerts().catch(() => {});
+      }, Number.isInteger(ALERTS_POLL_INTERVAL_MS) && ALERTS_POLL_INTERVAL_MS > 0
+        ? ALERTS_POLL_INTERVAL_MS
+        : 1000);
 
-      alertListener.on("error", (err) => {
-        console.error("Erreur listener PostgreSQL (SSE) :", err.message);
-      });
+      if (typeof alertsPollTimer.unref === "function") {
+        alertsPollTimer.unref();
+      }
     } catch (err) {
-      console.error(
-        "Impossible d'initialiser LISTEN/NOTIFY (SSE distribué) :",
+      console.warn(
+        "Initialisation des alertes distribuees indisponible :",
         err.message,
       );
     }
@@ -95,14 +142,22 @@ if (DATABASE_URL) {
 
   publishTodoAlert = async (todo) => {
     const payload = toTodoAlertPayload(todo);
+    broadcastTodoAlertToLocalClients(payload);
+
+    const event = {
+      source: INSTANCE_TAG,
+      type: "todo_alert",
+      data: payload,
+    };
+
     try {
-      await pool.query("SELECT pg_notify($1, $2)", [
-        ALERT_CHANNEL,
-        JSON.stringify(payload),
-      ]);
+      await pool.query(
+        `INSERT INTO alert_events (source_instance, event_type, payload)
+         VALUES ($1, $2, $3::jsonb)`,
+        [INSTANCE_TAG, "todo_alert", JSON.stringify(event)],
+      );
     } catch (err) {
-      console.error("Erreur d'envoi NOTIFY (SSE) :", err.message);
-      broadcastTodoAlertToLocalClients(payload);
+      console.warn("Persistance d'alerte distribuee indisponible :", err.message);
     }
   };
 
