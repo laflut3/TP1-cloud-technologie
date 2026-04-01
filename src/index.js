@@ -57,6 +57,12 @@ if (DATABASE_URL) {
       const result = await pool.query("SELECT * FROM items ORDER BY created_at DESC");
       return result.rows;
     },
+    async findOverdue() {
+      const result = await pool.query(
+        "SELECT * FROM items WHERE status = 'pending' AND due_date IS NOT NULL AND due_date < CURRENT_DATE ORDER BY created_at DESC"
+      );
+      return result.rows;
+    },
     async insert({ title, description, dueDate }) {
       const result = await pool.query(
         "INSERT INTO items (title, description, due_date, status) VALUES ($1, $2, $3, $4) RETURNING *",
@@ -115,6 +121,18 @@ if (DATABASE_URL) {
       }
 
       return sorted.filter((item) => item.status === status);
+    },
+    async findOverdue() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      return [...items]
+        .reverse()
+        .filter((item) => item.status === "pending" && item.due_date)
+        .filter((item) => {
+          const dueDate = new Date(item.due_date);
+          return !Number.isNaN(dueDate.getTime()) && dueDate < today;
+        });
     },
     async insert({ title, description, dueDate }) {
       const item = {
@@ -195,6 +213,17 @@ app.get(["/todo", "/todos"], async (req, res) => {
 
   const todos = await storage.findAll(status);
   return res.status(200).json(todos);
+});
+
+// GET /todos/overdue
+app.get("/todos/overdue", async (req, res) => {
+  try {
+    const overdueTodos = await storage.findOverdue();
+    return res.status(200).json(overdueTodos);
+  } catch (err) {
+    console.error("Erreur lors de la récupération des tâches en retard :", err.message);
+    return res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 // POST /todos
