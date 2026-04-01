@@ -1,17 +1,16 @@
 # TP1-cloud-technologie
 
-API Node.js avec Express et PostgreSQL.
+Projet Node.js minimal avec Express et PostgreSQL.
 
 ## Prerequis
 
 - Node.js 18+
-- PostgreSQL
+- PostgreSQL (optionnel)
 
 ## Installation
 
 ```bash
 npm install
-cp .env.example .env
 ```
 
 ## Lancement
@@ -26,7 +25,21 @@ ou en mode normal:
 npm start
 ```
 
-## Routes
+## Endpoint
 
-- `GET /health` : verifie que l'API tourne
-- `GET /db-health` : verifie la connexion PostgreSQL
+- `GET /health` : etat de l'application et de la base
+
+## Structure
+
+- `src/index.js` : serveur Express + route healthcheck
+- `src/config/env.js` : configuration basique
+- `src/db/postgres.js` : verification PostgreSQL
+
+## Variables d'environnement
+
+- `PORT` (optionnel)
+- `APP_NAME` (optionnel)
+- `APP_VERSION` (optionnel)
+- `POSTGRESQL_ADDON_URI` ou `DATABASE_URL` (optionnel)
+
+Si l'URL PostgreSQL n'est pas definie, `/health` renvoie `database: "not_configured"`.
