@@ -57,10 +57,10 @@ if (DATABASE_URL) {
       const result = await pool.query("SELECT * FROM items ORDER BY created_at DESC");
       return result.rows;
     },
-    async insert(name, description) {
+    async insert({ title, description, dueDate }) {
       const result = await pool.query(
-        "INSERT INTO items (name, description) VALUES ($1, $2) RETURNING *",
-        [name, description ?? null]
+        "INSERT INTO items (title, description, due_date, status) VALUES ($1, $2, $3, $4) RETURNING *",
+        [title, description ?? null, dueDate ?? null, "pending"]
       );
       return result.rows[0];
     },
@@ -82,11 +82,13 @@ if (DATABASE_URL) {
 
       return sorted.filter((item) => item.status === status);
     },
-    async insert(name, description) {
+    async insert({ title, description, dueDate }) {
       const item = {
         id: nextId++,
-        name,
+        title,
         description: description ?? null,
+        due_date: dueDate ?? null,
+        status: "pending",
         created_at: new Date().toISOString(),
       };
       items.push(item);
@@ -131,7 +133,26 @@ app.get(["/todo", "/todos"], async (req, res) => {
   return res.status(200).json(todos);
 });
 
+// POST /todos
+app.post("/todos", async (req, res) => {
+  const { title, description, due_date: dueDate } = req.body ?? {};
 
+  if (typeof title !== "string" || title.trim().length === 0) {
+    return res.status(400).json({ error: "title is required and cannot be empty" });
+  }
+
+  try {
+    const todo = await storage.insert({
+      title: title.trim(),
+      description,
+      dueDate,
+    });
+    return res.status(201).json(todo);
+  } catch (err) {
+    console.error("Erreur lors de la création de la tâche :", err.message);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // -------------------------------------------------------------------
 // Démarrage
