@@ -90,7 +90,7 @@ app.get("/", async (req, res) => {
 
 // GET /health
 app.get("/health", async (req, res) => {
-  const health = { status: "ok", name: APP_NAME, version: APP_VERSION };
+  const health = { status: "ok", name: "todo-torres", version: APP_VERSION };
 
   if (DATABASE_URL) {
     try {
@@ -103,6 +103,8 @@ app.get("/health", async (req, res) => {
 
   res.json(health);
 });
+
+
 
 // -------------------------------------------------------------------
 // Démarrage
