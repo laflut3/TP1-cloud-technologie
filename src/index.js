@@ -70,32 +70,15 @@ if (DATABASE_URL) {
       );
       return result.rows[0];
     },
-    async updateById(id, updates) {
-      const hasTitle = Object.prototype.hasOwnProperty.call(updates, "title");
-      const hasDescription = Object.prototype.hasOwnProperty.call(updates, "description");
-      const hasDueDate = Object.prototype.hasOwnProperty.call(updates, "dueDate");
-      const hasStatus = Object.prototype.hasOwnProperty.call(updates, "status");
-
+    async updateById(id, { title, status }) {
       const result = await pool.query(
         `UPDATE items
          SET
-           title = CASE WHEN $2 THEN $3 ELSE title END,
-           description = CASE WHEN $4 THEN $5 ELSE description END,
-           due_date = CASE WHEN $6 THEN $7::date ELSE due_date END,
-           status = CASE WHEN $8 THEN $9 ELSE status END
+           title = COALESCE($2, title),
+           status = COALESCE($3, status)
          WHERE id = $1
          RETURNING *`,
-        [
-          id,
-          hasTitle,
-          hasTitle ? updates.title : null,
-          hasDescription,
-          hasDescription ? updates.description : null,
-          hasDueDate,
-          hasDueDate ? updates.dueDate : null,
-          hasStatus,
-          hasStatus ? updates.status : null,
-        ]
+        [id, title ?? null, status ?? null]
       );
 
       return result.rows[0] ?? null;
@@ -146,24 +129,14 @@ if (DATABASE_URL) {
       items.push(item);
       return item;
     },
-    async updateById(id, updates) {
+    async updateById(id, { title, status }) {
       const item = items.find((todo) => todo.id === id);
       if (!item) {
         return null;
       }
 
-      if (Object.prototype.hasOwnProperty.call(updates, "title")) {
-        item.title = updates.title;
-      }
-      if (Object.prototype.hasOwnProperty.call(updates, "description")) {
-        item.description = updates.description ?? null;
-      }
-      if (Object.prototype.hasOwnProperty.call(updates, "dueDate")) {
-        item.due_date = updates.dueDate ?? null;
-      }
-      if (Object.prototype.hasOwnProperty.call(updates, "status")) {
-        item.status = updates.status;
-      }
+      if (title !== undefined) item.title = title;
+      if (status !== undefined) item.status = status;
 
       return item;
     },
@@ -254,29 +227,21 @@ app.patch("/todos/:id", async (req, res) => {
     return res.status(400).json({ error: "Invalid id" });
   }
 
-  const body = req.body ?? {};
+  const { title, status } = req.body ?? {};
   const updates = {};
 
-  if (Object.prototype.hasOwnProperty.call(body, "title")) {
-    if (typeof body.title !== "string" || body.title.trim().length === 0) {
+  if (title !== undefined) {
+    if (typeof title !== "string" || title.trim().length === 0) {
       return res.status(400).json({ error: "title cannot be empty" });
     }
-    updates.title = body.title.trim();
+    updates.title = title.trim();
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, "description")) {
-    updates.description = body.description;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, "due_date")) {
-    updates.dueDate = body.due_date;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, "status")) {
-    if (body.status !== "pending" && body.status !== "done") {
+  if (status !== undefined) {
+    if (status !== "pending" && status !== "done") {
       return res.status(400).json({ error: "Invalid status. Use pending or done." });
     }
-    updates.status = body.status;
+    updates.status = status;
   }
 
   try {
