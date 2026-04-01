@@ -148,6 +148,11 @@ if (DATABASE_URL) {
       return result.rows;
     },
 
+    async findById(id) {
+      const result = await pool.query("SELECT * FROM items WHERE id = $1", [id]);
+      return result.rows[0] ?? null;
+    },
+
     async insert({ title, description, dueDate }) {
       const result = await pool.query(
         "INSERT INTO items (title, description, due_date, status) VALUES ($1, $2, $3, $4) RETURNING *",
@@ -210,6 +215,9 @@ if (DATABASE_URL) {
           const dueDate = new Date(item.due_date);
           return !Number.isNaN(dueDate.getTime()) && dueDate < today;
         });
+    },
+    async findById(id) {
+      return items.find((todo) => todo.id === id) ?? null;
     },
     async insert({ title, description, dueDate }) {
       const item = {
@@ -347,6 +355,30 @@ app.post("/todos", async (req, res) => {
     return res.status(201).json(todo);
   } catch (err) {
     console.error("Erreur lors de la création de la tâche :", err.message);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /todos/:id/notify
+app.post("/todos/:id/notify", async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({ error: "Invalid id" });
+  }
+
+  try {
+    const todo = await storage.findById(id);
+    if (!todo) {
+      return res.status(404).json({ error: "Todo not found" });
+    }
+
+    await publishTodoAlert(todo);
+    return res.status(200).json({
+      message: "Alerte envoyée",
+      listeners: sseClients.size,
+    });
+  } catch (err) {
+    console.error("Erreur lors de l'envoi de l'alerte :", err.message);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
