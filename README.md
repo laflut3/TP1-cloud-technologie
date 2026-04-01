@@ -25,6 +25,13 @@ ou en mode normal:
 npm start
 ```
 
+## Interface Web (UI)
+
+Une interface simple est disponible pour tester les requetes API:
+
+- En local: `http://localhost:3000/ui`
+- Sur Clever Cloud: `https://app-c1d1d463-f078-4e86-b30d-a1eeda0a839a.cleverapps.io/ui`
+
 ## Endpoints minimum
 
 - `GET /` : message de bienvenue
