@@ -34,7 +34,7 @@ Une interface simple est disponible pour tester les requetes API:
 
 Note:
 - L'UI a ete vibe coded.
-- Les requetes API (`GET/POST/PATCH/DELETE`) ont ete codees a la main.
+- Le plus gros des requetes API (`GET/POST/PATCH/DELETE`) a été codees a la main.
 
 ## Endpoints minimum
 
