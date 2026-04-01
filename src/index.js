@@ -27,28 +27,83 @@ const DATABASE_URL = process.env.POSTGRESQL_ADDON_URI;
 
 let storage;
 const sseClients = new Set();
+const ALERT_CHANNEL = "todo_alerts";
+
+function toTodoAlertPayload(todo) {
+  return {
+    id: todo.id,
+    title: todo.title,
+    status: todo.status,
+    due_date: todo.due_date ?? null,
+  };
+}
 
 function writeSseEvent(res, event, data) {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-function broadcastTodoAlert(todo) {
-  const payload = {
-    id: todo.id,
-    title: todo.title,
-    status: todo.status,
-    due_date: todo.due_date ?? null,
-  };
-
+function broadcastTodoAlertToLocalClients(payload) {
   for (const client of sseClients) {
-    writeSseEvent(client, "todo_alert", payload);
+    try {
+      writeSseEvent(client, "todo_alert", payload);
+    } catch {
+      sseClients.delete(client);
+    }
   }
 }
 
+let initAlertStreaming = async () => {};
+let publishTodoAlert = async (todo) => {
+  broadcastTodoAlertToLocalClients(toTodoAlertPayload(todo));
+};
+
 if (DATABASE_URL) {
-  const { Pool } = require("pg");
+  const { Client, Pool } = require("pg");
   const pool = new Pool({ connectionString: DATABASE_URL });
+  const alertListener = new Client({ connectionString: DATABASE_URL });
+
+  initAlertStreaming = async () => {
+    try {
+      await alertListener.connect();
+      await alertListener.query(`LISTEN ${ALERT_CHANNEL}`);
+
+      alertListener.on("notification", (message) => {
+        if (message.channel !== ALERT_CHANNEL || !message.payload) {
+          return;
+        }
+
+        try {
+          const payload = JSON.parse(message.payload);
+          broadcastTodoAlertToLocalClients(payload);
+        } catch (err) {
+          console.error("Payload d'alerte SSE invalide :", err.message);
+        }
+      });
+
+      alertListener.on("error", (err) => {
+        console.error("Erreur listener PostgreSQL (SSE) :", err.message);
+      });
+    } catch (err) {
+      console.error(
+        "Impossible d'initialiser LISTEN/NOTIFY (SSE distribué) :",
+        err.message,
+      );
+    }
+  };
+
+  publishTodoAlert = async (todo) => {
+    const payload = toTodoAlertPayload(todo);
+    try {
+      await pool.query("SELECT pg_notify($1, $2)", [
+        ALERT_CHANNEL,
+        JSON.stringify(payload),
+      ]);
+    } catch (err) {
+      console.error("Erreur d'envoi NOTIFY (SSE) :", err.message);
+      broadcastTodoAlertToLocalClients(payload);
+    }
+  };
 
   storage = {
     async init() {
@@ -62,6 +117,8 @@ if (DATABASE_URL) {
           created_at  TIMESTAMPTZ DEFAULT NOW()
         )
       `);
+
+      await initAlertStreaming();
     },
 
     async healthCheck() {
@@ -288,7 +345,7 @@ app.post("/todos", async (req, res) => {
       description,
       dueDate,
     });
-    broadcastTodoAlert(todo);
+    await publishTodoAlert(todo);
     return res.status(201).json(todo);
   } catch (err) {
     console.error("Erreur lors de la création de la tâche :", err.message);
@@ -327,7 +384,7 @@ app.patch("/todos/:id", async (req, res) => {
     if (!todo) {
       return res.status(404).json({ error: "Todo not found" });
     }
-    broadcastTodoAlert(todo);
+    await publishTodoAlert(todo);
     return res.status(200).json(todo);
   } catch (err) {
     console.error("Erreur lors de la mise à jour de la tâche :", err.message);
