@@ -17,7 +17,6 @@ app.use((req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 const APP_VERSION = process.env.APP_VERSION || "1.0.0";
-const APP_NAME = process.env.APP_NAME || "my-app";
 const DATABASE_URL = process.env.POSTGRESQL_ADDON_URI;
 
 // -------------------------------------------------------------------
@@ -43,10 +42,12 @@ if (DATABASE_URL) {
         )
       `);
     },
+
     async healthCheck() {
       await pool.query("SELECT 1");
       return "connected";
     },
+
     async findAll(status) {
       if (status) {
         const result = await pool.query(
@@ -59,12 +60,14 @@ if (DATABASE_URL) {
       const result = await pool.query("SELECT * FROM items ORDER BY created_at DESC");
       return result.rows;
     },
+
     async findOverdue() {
       const result = await pool.query(
         "SELECT * FROM items WHERE status = 'pending' AND due_date IS NOT NULL AND due_date < CURRENT_DATE ORDER BY created_at DESC"
       );
       return result.rows;
     },
+
     async insert({ title, description, dueDate }) {
       const result = await pool.query(
         "INSERT INTO items (title, description, due_date, status) VALUES ($1, $2, $3, $4) RETURNING *",
@@ -72,6 +75,7 @@ if (DATABASE_URL) {
       );
       return result.rows[0];
     },
+
     async updateById(id, { title, status }) {
       const result = await pool.query(
         `UPDATE items
@@ -85,6 +89,7 @@ if (DATABASE_URL) {
 
       return result.rows[0] ?? null;
     },
+
     async deleteById(id) {
       const result = await pool.query("DELETE FROM items WHERE id = $1 RETURNING id", [id]);
       return result.rowCount > 0;
@@ -261,6 +266,7 @@ app.patch("/todos/:id", async (req, res) => {
 // DELETE /todos/:id
 app.delete("/todos/:id", async (req, res) => {
   const id = Number.parseInt(req.params.id, 10);
+  
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ error: "Invalid id" });
   }
