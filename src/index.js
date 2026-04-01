@@ -265,13 +265,11 @@ app.get("/health", async (req, res) => {
       await storage.healthCheck();
       health.database = "connected";
     } catch {
-      return res
-        .status(503)
-        .json({
-          status: "error",
-          version: APP_VERSION,
-          database: "unreachable",
-        });
+      return res.status(503).json({
+        status: "error",
+        version: APP_VERSION,
+        database: "unreachable",
+      });
     }
   }
 

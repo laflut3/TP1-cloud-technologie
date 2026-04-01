@@ -192,6 +192,18 @@
         line-height: 1.35;
       }
 
+      .alert-controls {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+
+      .alerts-log {
+        min-height: 130px;
+        max-height: 260px;
+      }
+
       @keyframes rise {
         from { opacity: 0; transform: translateY(12px); }
         to { opacity: 1; transform: translateY(0); }
@@ -273,6 +285,16 @@
             <button class="btn-danger" type="submit">DELETE /todos/:id</button>
           </form>
         </article>
+
+        <article class="panel">
+          <h2>Alertes Temps Réel</h2>
+          <div class="alert-controls">
+            <span class="badge" id="alerts-state">DISCONNECTED</span>
+            <button class="btn-soft" id="alerts-reconnect" type="button">Reconnecter</button>
+            <button class="btn-soft" id="alerts-clear" type="button">Vider</button>
+          </div>
+          <pre class="alerts-log" id="alerts-log">En attente de connexion SSE sur /alerts...</pre>
+        </article>
       </section>
 
       <section class="result">
@@ -293,8 +315,15 @@
       const statusEl = $("res-status");
       const urlEl = $("res-url");
       const bodyEl = $("response-body");
+      const alertsStateEl = $("alerts-state");
+      const alertsLogEl = $("alerts-log");
+      const alertsReconnectBtn = $("alerts-reconnect");
+      const alertsClearBtn = $("alerts-clear");
 
       baseUrlInput.value = window.location.origin;
+      let alertStream = null;
+      let reconnectTimer = null;
+      const alertLines = [];
 
       function cleanBaseUrl(url) {
         return (url || window.location.origin).trim().replace(/\/+$/, "");
@@ -316,6 +345,92 @@
             : typeof payload === "string"
               ? payload
               : JSON.stringify(payload, null, 2);
+      }
+
+      function setAlertsState(text, isOk = false) {
+        alertsStateEl.textContent = text;
+        alertsStateEl.className = `badge ${isOk ? "ok" : ""}`.trim();
+      }
+
+      function renderAlertLog() {
+        if (alertLines.length === 0) {
+          alertsLogEl.textContent = "En attente de connexion SSE sur /alerts...";
+          return;
+        }
+        alertsLogEl.textContent = alertLines.join("\n");
+        alertsLogEl.scrollTop = alertsLogEl.scrollHeight;
+      }
+
+      function pushAlertLine(line) {
+        alertLines.push(line);
+        if (alertLines.length > 80) {
+          alertLines.splice(0, alertLines.length - 80);
+        }
+        renderAlertLog();
+      }
+
+      function closeAlertStream() {
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        if (alertStream) {
+          alertStream.close();
+          alertStream = null;
+        }
+      }
+
+      function scheduleReconnect() {
+        if (reconnectTimer) {
+          return;
+        }
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          connectAlertStream();
+        }, 2000);
+      }
+
+      function connectAlertStream() {
+        closeAlertStream();
+        const base = cleanBaseUrl(baseUrlInput.value);
+        const alertsUrl = `${base}/alerts`;
+
+        setAlertsState("CONNECTING");
+
+        try {
+          alertStream = new EventSource(alertsUrl);
+        } catch (err) {
+          setAlertsState("ERROR");
+          pushAlertLine(`[${new Date().toISOString()}] Erreur ouverture SSE: ${err.message}`);
+          scheduleReconnect();
+          return;
+        }
+
+        alertStream.onopen = () => {
+          setAlertsState("CONNECTED", true);
+          pushAlertLine(`[${new Date().toISOString()}] Connecté: ${alertsUrl}`);
+        };
+
+        alertStream.onerror = () => {
+          setAlertsState("DISCONNECTED");
+          pushAlertLine(`[${new Date().toISOString()}] Connexion perdue. Reconnexion...`);
+          if (alertStream) {
+            alertStream.close();
+            alertStream = null;
+          }
+          scheduleReconnect();
+        };
+
+        alertStream.addEventListener("todo_alert", (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            pushAlertLine(
+              `[${new Date().toISOString()}] todo_alert id=${payload.id} title="${payload.title}" status=${payload.status} due_date=${payload.due_date ?? "null"}`,
+            );
+          } catch {
+            pushAlertLine(`[${new Date().toISOString()}] todo_alert invalide: ${event.data}`);
+          }
+        });
       }
 
       async function api(method, path, body) {
@@ -379,6 +494,20 @@
         const id = $("delete-id").value.trim();
         api("DELETE", `/todos/${id}`);
       });
+
+      alertsReconnectBtn.addEventListener("click", () => {
+        pushAlertLine(`[${new Date().toISOString()}] Reconnexion manuelle demandée`);
+        connectAlertStream();
+      });
+
+      alertsClearBtn.addEventListener("click", () => {
+        alertLines.length = 0;
+        renderAlertLog();
+      });
+
+      baseUrlInput.addEventListener("change", connectAlertStream);
+      window.addEventListener("beforeunload", closeAlertStream);
+      connectAlertStream();
     </script>
   </body>
 </html>
