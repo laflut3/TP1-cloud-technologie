@@ -10,7 +10,9 @@ app.use("/ui", express.static(path.join(__dirname, "..", "public")));
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
-    console.log(`${req.method} ${req.path} ${res.statusCode} ${Date.now() - start}ms`);
+    console.log(
+      `${req.method} ${req.path} ${res.statusCode} ${Date.now() - start}ms`,
+    );
   });
   next();
 });
@@ -52,18 +54,20 @@ if (DATABASE_URL) {
       if (status) {
         const result = await pool.query(
           "SELECT * FROM items WHERE status = $1 ORDER BY created_at DESC",
-          [status]
+          [status],
         );
         return result.rows;
       }
 
-      const result = await pool.query("SELECT * FROM items ORDER BY created_at DESC");
+      const result = await pool.query(
+        "SELECT * FROM items ORDER BY created_at DESC",
+      );
       return result.rows;
     },
 
     async findOverdue() {
       const result = await pool.query(
-        "SELECT * FROM items WHERE status = 'pending' AND due_date IS NOT NULL AND due_date < CURRENT_DATE ORDER BY created_at DESC"
+        "SELECT * FROM items WHERE status = 'pending' AND due_date IS NOT NULL AND due_date < CURRENT_DATE ORDER BY created_at DESC",
       );
       return result.rows;
     },
@@ -71,7 +75,7 @@ if (DATABASE_URL) {
     async insert({ title, description, dueDate }) {
       const result = await pool.query(
         "INSERT INTO items (title, description, due_date, status) VALUES ($1, $2, $3, $4) RETURNING *",
-        [title, description ?? null, dueDate ?? null, "pending"]
+        [title, description ?? null, dueDate ?? null, "pending"],
       );
       return result.rows[0];
     },
@@ -84,26 +88,33 @@ if (DATABASE_URL) {
            status = COALESCE($3, status)
          WHERE id = $1
          RETURNING *`,
-        [id, title ?? null, status ?? null]
+        [id, title ?? null, status ?? null],
       );
 
       return result.rows[0] ?? null;
     },
 
     async deleteById(id) {
-      const result = await pool.query("DELETE FROM items WHERE id = $1 RETURNING id", [id]);
+      const result = await pool.query(
+        "DELETE FROM items WHERE id = $1 RETURNING id",
+        [id],
+      );
       return result.rowCount > 0;
     },
   };
 } else {
-  console.warn("POSTGRESQL_ADDON_URI non défini — stockage en mémoire (données perdues au redémarrage)");
+  console.warn(
+    "POSTGRESQL_ADDON_URI non défini — stockage en mémoire (données perdues au redémarrage)",
+  );
 
   const items = [];
   let nextId = 1;
 
   storage = {
     async init() {},
-    async healthCheck() { return "not configured"; },
+    async healthCheck() {
+      return "not configured";
+    },
     async findAll(status) {
       const sorted = [...items].reverse();
       if (!status) {
@@ -164,7 +175,9 @@ if (DATABASE_URL) {
 // -------------------------------------------------------------------
 
 app.get("/", async (req, res) => {
-  res.json({ message: `Bienvenue sur l'app de Léo Torres (version ${APP_VERSION})` });
+  res.json({
+    message: `Bienvenue sur l'app de Léo Torres (version ${APP_VERSION})`,
+  });
 });
 
 // GET /health
@@ -176,7 +189,13 @@ app.get("/health", async (req, res) => {
       await storage.healthCheck();
       health.database = "connected";
     } catch {
-      return res.status(503).json({ status: "error", version: APP_VERSION, database: "unreachable" });
+      return res
+        .status(503)
+        .json({
+          status: "error",
+          version: APP_VERSION,
+          database: "unreachable",
+        });
     }
   }
 
@@ -188,7 +207,9 @@ app.get(["/todo", "/todos"], async (req, res) => {
   const { status } = req.query;
 
   if (status !== undefined && status !== "pending" && status !== "done") {
-    return res.status(400).json({ error: "Invalid status. Use pending or done." });
+    return res
+      .status(400)
+      .json({ error: "Invalid status. Use pending or done." });
   }
 
   const todos = await storage.findAll(status);
@@ -201,7 +222,10 @@ app.get("/todos/overdue", async (req, res) => {
     const overdueTodos = await storage.findOverdue();
     return res.status(200).json(overdueTodos);
   } catch (err) {
-    console.error("Erreur lors de la récupération des tâches en retard :", err.message);
+    console.error(
+      "Erreur lors de la récupération des tâches en retard :",
+      err.message,
+    );
     return res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -211,7 +235,9 @@ app.post("/todos", async (req, res) => {
   const { title, description, due_date: dueDate } = req.body ?? {};
 
   if (typeof title !== "string" || title.trim().length === 0) {
-    return res.status(400).json({ error: "title is required and cannot be empty" });
+    return res
+      .status(400)
+      .json({ error: "title is required and cannot be empty" });
   }
 
   try {
@@ -246,7 +272,9 @@ app.patch("/todos/:id", async (req, res) => {
 
   if (status !== undefined) {
     if (status !== "pending" && status !== "done") {
-      return res.status(400).json({ error: "Invalid status. Use pending or done." });
+      return res
+        .status(400)
+        .json({ error: "Invalid status. Use pending or done." });
     }
     updates.status = status;
   }
@@ -266,7 +294,7 @@ app.patch("/todos/:id", async (req, res) => {
 // DELETE /todos/:id
 app.delete("/todos/:id", async (req, res) => {
   const id = Number.parseInt(req.params.id, 10);
-  
+
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ error: "Invalid id" });
   }
@@ -287,11 +315,14 @@ app.delete("/todos/:id", async (req, res) => {
 // Démarrage
 // -------------------------------------------------------------------
 
-storage.init()
+storage
+  .init()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`App démarrée sur le port ${PORT} (version ${APP_VERSION})`);
-      console.log(`Base de données : ${DATABASE_URL ? "PostgreSQL" : "mémoire"}`);
+      console.log(
+        `Base de données : ${DATABASE_URL ? "PostgreSQL" : "mémoire"}`,
+      );
     });
   })
   .catch((err) => {
