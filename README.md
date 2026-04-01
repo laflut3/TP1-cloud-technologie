@@ -29,7 +29,7 @@ npm start
 
 Une interface simple est disponible pour tester les requetes API:
 
-- En local: `http://localhost:3000/ui`
+- En local: `http://localhost:8080/ui`
 - Sur Clever Cloud: `https://<instance>.cleverapps.io/ui`
 
 Note:
@@ -50,14 +50,30 @@ Note:
 
 | Variable | Source | Description |
 | --- | --- | --- |
-| `PORT` | Clever Cloud | Port d'ecoute. L'application doit ecouter sur cette valeur. |
-| `POSTGRESQL_ADDON_URI` | Clever Cloud (add-on) | URI de connexion PostgreSQL. |
-| `APP_NAME` | Vous | Nom affiche dans `/health`. |
-| `APP_VERSION` | Vous | Version affichee dans `GET /`. |
-| `PG_POOL_MAX` | Vous (optionnel) | Nombre max de connexions PostgreSQL par instance (`1` par defaut). |
-| `ALERTS_POLL_INTERVAL_MS` | Vous (optionnel) | Intervalle de polling des alertes distribuees (`1000` ms par defaut). |
+| `PORT` | Clever Cloud (auto) | Port d'ecoute injecte automatiquement. Ne pas le fixer manuellement. |
+| `POSTGRESQL_ADDON_URI` | Clever Cloud (add-on, auto) | URI PostgreSQL injectee apres liaison de l'add-on. |
+| `APP_NAME` | Vous (manuel) | Nom affiche dans `/health`. |
+| `APP_VERSION` | Vous (manuel) | Version affichee dans `GET /` et `/health`. |
+| `PG_POOL_MAX` | Vous (manuel, optionnel) | Max connexions PostgreSQL par instance (`1` par defaut, recommande sur petit plan). |
+| `ALERTS_POLL_INTERVAL_MS` | Vous (manuel, optionnel) | Intervalle de polling des alertes distribuees (`1000` ms par defaut). |
 
 Si `POSTGRESQL_ADDON_URI` n'est pas definie, `/health` renvoie `database: "not configured"`.
+
+## Commandes Clever Cloud (variables)
+
+Ajouter les variables manuelles:
+
+```bash
+clever env set APP_NAME "todo-torres"
+clever env set APP_VERSION "2.4.1"
+clever env set PG_POOL_MAX "1"
+clever env set ALERTS_POLL_INTERVAL_MS "1000"
+```
+
+Ne pas ajouter manuellement:
+
+- `PORT` (injecte automatiquement par Clever Cloud)
+- `POSTGRESQL_ADDON_URI` (injectee par l'add-on PostgreSQL lie)
 
 ## Configuration Clever Cloud (PostgreSQL)
 
@@ -69,9 +85,6 @@ clever addon create postgresql-addon <ADDON_NAME> --plan dev --org <ORG_ID>
 
 # 2) Lier l'addon a l'application
 clever service link-addon <ADDON_NAME>
-
-# 3) Ajouter la version applicative
-clever env set APP_VERSION 1.0.0
 ```
 
 Verifier les variables disponibles:
@@ -83,6 +96,7 @@ clever env
 Exemple (valeurs masquees):
 
 ```bash
+APP_NAME="todo-torres"
 APP_VERSION="1.0.0"
 POSTGRESQL_ADDON_DB="<db_name>"
 POSTGRESQL_ADDON_HOST="<host>"
