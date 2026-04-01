@@ -18,6 +18,7 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
+const APP_NAME = process.env.APP_NAME || "todo-torres";
 const APP_VERSION = process.env.APP_VERSION || "1.0.0";
 const DATABASE_URL = process.env.POSTGRESQL_ADDON_URI;
 
@@ -266,15 +267,20 @@ app.get("/", async (req, res) => {
 
 // GET /health
 app.get("/health", async (req, res) => {
-  const health = { status: "ok", name: "todo-torres", version: APP_VERSION };
+  const health = {
+    status: "ok",
+    app: APP_NAME,
+    version: APP_VERSION,
+    database: DATABASE_URL ? "connected" : "not configured",
+  };
 
   if (DATABASE_URL) {
     try {
       await storage.healthCheck();
-      health.database = "connected";
     } catch {
       return res.status(503).json({
         status: "error",
+        app: APP_NAME,
         version: APP_VERSION,
         database: "unreachable",
       });

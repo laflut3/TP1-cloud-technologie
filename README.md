@@ -48,12 +48,14 @@ Note:
 
 ## Variables d'environnement
 
-- `PORT` (optionnel)
-- `APP_NAME` (optionnel)
-- `APP_VERSION` (optionnel)
-- `POSTGRESQL_ADDON_URI` ou `DATABASE_URL` (optionnel)
+| Variable | Source | Description |
+| --- | --- | --- |
+| `PORT` | Clever Cloud | Port d'ecoute. L'application doit ecouter sur cette valeur. |
+| `POSTGRESQL_ADDON_URI` | Clever Cloud (add-on) | URI de connexion PostgreSQL. |
+| `APP_NAME` | Vous | Nom affiche dans `/health`. |
+| `APP_VERSION` | Vous | Version affichee dans `GET /`. |
 
-Si l'URL PostgreSQL n'est pas definie, `/health` renvoie `database: "not_configured"`.
+Si `POSTGRESQL_ADDON_URI` n'est pas definie, `/health` renvoie `database: "not configured"`.
 
 ## Configuration Clever Cloud (PostgreSQL)
 
