@@ -1,8 +1,26 @@
+require("dotenv").config();
+
 const express = require("express");
-const { port: PORT, appName: APP_NAME, appVersion: APP_VERSION, databaseUrl: DATABASE_URL } = require("./config/env");
 
 const app = express();
 app.use(express.json());
+
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    console.log(`${req.method} ${req.path} ${res.statusCode} ${Date.now() - start}ms`);
+  });
+  next();
+});
+
+const PORT = process.env.PORT || 3000;
+const APP_VERSION = process.env.APP_VERSION || "1.0.0";
+const APP_NAME = process.env.APP_NAME || "my-app";
+const DATABASE_URL = process.env.POSTGRESQL_ADDON_URI;
+
+// -------------------------------------------------------------------
+// Storage — PostgreSQL si POSTGRESQL_ADDON_URI est défini, mémoire sinon
+// -------------------------------------------------------------------
 
 let storage;
 
@@ -15,8 +33,10 @@ if (DATABASE_URL) {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS items (
           id          SERIAL PRIMARY KEY,
-          name        TEXT NOT NULL,
+          title       TEXT NOT NULL,
           description TEXT,
+          due_date    DATE,
+          status      TEXT,
           created_at  TIMESTAMPTZ DEFAULT NOW()
         )
       `);
@@ -38,19 +58,15 @@ if (DATABASE_URL) {
     },
   };
 } else {
-  console.warn("POSTGRESQL_ADDON_URI non defini - stockage en memoire (donnees perdues au redemarrage)");
+  console.warn("POSTGRESQL_ADDON_URI non défini — stockage en mémoire (données perdues au redémarrage)");
 
   const items = [];
   let nextId = 1;
 
   storage = {
     async init() {},
-    async healthCheck() {
-      return "not configured";
-    },
-    async findAll() {
-      return [...items].reverse();
-    },
+    async healthCheck() { return "not configured"; },
+    async findAll() { return [...items].reverse(); },
     async insert(name, description) {
       const item = {
         id: nextId++,
@@ -64,39 +80,42 @@ if (DATABASE_URL) {
   };
 }
 
-app.get("/", async (_req, res) => {
-  res.json({ message: `Bienvenue sur l'app de Leo Torres (version ${APP_VERSION})` });
+// -------------------------------------------------------------------
+// Routes
+// -------------------------------------------------------------------
+
+app.get("/", async (req, res) => {
+  res.json({ message: `Bienvenue sur l'app de Léo Torres (version ${APP_VERSION})` });
 });
 
-app.get("/health", async (_req, res) => {
-  const health = {
-    status: "ok",
-    name: APP_NAME,
-    version: APP_VERSION,
-  };
+// GET /health
+app.get("/health", async (req, res) => {
+  const health = { status: "ok", name: APP_NAME, version: APP_VERSION };
 
   if (DATABASE_URL) {
     try {
       await storage.healthCheck();
       health.database = "connected";
-    } catch (_error) {
-      return res
-        .status(503)
-        .json({ status: "error", version: APP_VERSION, database: "unreachable" });
+    } catch {
+      return res.status(503).json({ status: "error", version: APP_VERSION, database: "unreachable" });
     }
   }
 
-  return res.json(health);
+  res.json(health);
 });
 
-storage
-  .init()
+// -------------------------------------------------------------------
+// Démarrage
+// -------------------------------------------------------------------
+
+storage.init()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`Server listening on port ${PORT}`);
+      console.log(`App démarrée sur le port ${PORT} (version ${APP_VERSION})`);
+      console.log(`Base de données : ${DATABASE_URL ? "PostgreSQL" : "mémoire"}`);
     });
   })
-  .catch((error) => {
-    console.error("Erreur d'initialisation :", error.message);
+  .catch((err) => {
+    console.error("Erreur d'initialisation :", err.message);
     process.exit(1);
   });
