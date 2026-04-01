@@ -45,7 +45,15 @@ if (DATABASE_URL) {
       await pool.query("SELECT 1");
       return "connected";
     },
-    async findAll() {
+    async findAll(status) {
+      if (status) {
+        const result = await pool.query(
+          "SELECT * FROM items WHERE status = $1 ORDER BY created_at DESC",
+          [status]
+        );
+        return result.rows;
+      }
+
       const result = await pool.query("SELECT * FROM items ORDER BY created_at DESC");
       return result.rows;
     },
@@ -66,7 +74,14 @@ if (DATABASE_URL) {
   storage = {
     async init() {},
     async healthCheck() { return "not configured"; },
-    async findAll() { return [...items].reverse(); },
+    async findAll(status) {
+      const sorted = [...items].reverse();
+      if (!status) {
+        return sorted;
+      }
+
+      return sorted.filter((item) => item.status === status);
+    },
     async insert(name, description) {
       const item = {
         id: nextId++,
@@ -102,6 +117,18 @@ app.get("/health", async (req, res) => {
   }
 
   res.json(health);
+});
+
+// GET /todos?status=pending|done
+app.get(["/todo", "/todos"], async (req, res) => {
+  const { status } = req.query;
+
+  if (status !== undefined && status !== "pending" && status !== "done") {
+    return res.status(400).json({ error: "Invalid status. Use pending or done." });
+  }
+
+  const todos = await storage.findAll(status);
+  return res.status(200).json(todos);
 });
 
 
