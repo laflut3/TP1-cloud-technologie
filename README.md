@@ -25,15 +25,15 @@ ou en mode normal:
 npm start
 ```
 
-## Endpoint
+## Endpoints minimum
 
+- `GET /` : message de bienvenue
 - `GET /health` : etat de l'application et de la base
 
 ## Structure
 
-- `src/index.js` : serveur Express + route healthcheck
+- `src/index.js` : serveur Express + storage + routes
 - `src/config/env.js` : configuration basique
-- `src/db/postgres.js` : verification PostgreSQL
 
 ## Variables d'environnement
 
